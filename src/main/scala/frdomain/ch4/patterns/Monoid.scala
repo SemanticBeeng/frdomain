@@ -47,4 +47,10 @@ object Monoid {
     def zero = zeroMoney
     def op(m1: Money, m2: Money) = if (gt(m1, m2)) m1 else m2
   }
+
+  implicit def BalanceAdditionMonoid = new Monoid[Balance] {
+    val m = implicitly[Monoid[Money]]
+    def zero = Balance(zeroMoney)
+    def op(b1: Balance, b2: Balance) = Balance(m.op(b1.amount, b2.amount))
+  }
 }
