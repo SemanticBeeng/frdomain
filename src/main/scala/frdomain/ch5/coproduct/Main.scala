@@ -11,6 +11,7 @@ import common._
 import scala.language.higherKinds
 
 import Injective._
+import AccountRepo._
 
 object Main {
   def prg[F[_]](implicit R: AccountRepository[F], S: AccountService[F]) = {
@@ -20,12 +21,12 @@ object Main {
 
     for {
       a <- open("a-123", "debasish ghosh", Some(today))
-      b <- credit(a.get, 1000)
-      c <- credit(b, 1000)
-      d <- debit(c, 500)
-      _ <- store(d)
-      c <- balance(d)
-    } yield (c)
+      b <- a.map(credit(_, 1000)).getOrElse(Free.point[CoyoF, Option[Account]](None))
+      c <- b.map(credit(_, 1000)).getOrElse(Free.point[CoyoF, Option[Account]](None))
+      d <- c.map(debit(_, 500)).getOrElse(Free.point[CoyoF, Option[Account]](None))
+      _ <- d.map(store(_)).getOrElse(Free.point[CoyoF, Unit](()))
+      e <- d.map(balance(_)).getOrElse(Free.point[CoyoF, Balance](Balance(-100)))
+    } yield (e)
   }
 
   type App[A] = Coproduct[AccountRepo, AccountAction, A]
