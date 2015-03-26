@@ -5,6 +5,7 @@ import scalaz._
 import Scalaz._
 import Free._
 
+import common._
 
 sealed trait AccountRepoF[+A]
   
@@ -24,7 +25,7 @@ object AccountRepoF {
   }
 }
 
-case class AccountRepository(name: String) {
+trait AccountRepository {
   def store(account: Account): AccountRepo[Unit] = 
     liftF(Store(account, ()))
   
@@ -39,6 +40,11 @@ case class AccountRepository(name: String) {
   def update(no: String, f: Account => Account): AccountRepo[Unit] = for {
     a <- query(no)
     _ <- store(f(a))
+  } yield ()
+
+  def updateBalance(no: String, amount: Amount, f: (Account, Amount) => Account) = for {
+    a <- query(no)
+    _ <- store(f(a, amount))
   } yield ()
 }
 
