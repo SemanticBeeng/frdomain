@@ -15,7 +15,7 @@ case object Checking extends AccountType
 case object Savings extends AccountType
 
 trait AccountService[Account, Amount, Balance] {
-  type Valid[A] = \/[NonEmptyList[String], A]
+  type Valid[A] = NonEmptyList[String] \/ A
   type AccountOperation[A] = Kleisli[Valid, AccountRepository, A]
 
   def open(no: String, name: String, rate: Option[BigDecimal], openingDate: Option[Date], 

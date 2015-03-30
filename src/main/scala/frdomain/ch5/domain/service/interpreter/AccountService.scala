@@ -14,7 +14,7 @@ import model.{ Account, Balance }
 import model.common._
 import repository.AccountRepository
 
-object AccountService extends AccountService[Account, Amount, Balance] {
+class AccountServiceInterpreter extends AccountService[Account, Amount, Balance] {
 
   def open(no: String, 
            name: String, 
@@ -66,3 +66,5 @@ object AccountService extends AccountService[Account, Amount, Balance] {
 
   def balance(no: String) = kleisli[Valid, AccountRepository, Balance] { (repo: AccountRepository) => repo.balance(no) }
 }
+
+object AccountService extends AccountServiceInterpreter
