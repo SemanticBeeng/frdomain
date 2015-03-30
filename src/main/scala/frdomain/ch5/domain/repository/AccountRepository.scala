@@ -17,5 +17,6 @@ trait AccountRepository {
     case a @ -\/(_) => a
   }
   def query(openedOn: Date): \/[NonEmptyList[String], Seq[Account]]
+  def all: \/[NonEmptyList[String], Seq[Account]]
 }
 

@@ -19,6 +19,7 @@ trait AccountRepositoryInMemory extends AccountRepository {
     a.right
   }
   def query(openedOn: Date): \/[NonEmptyList[String], Seq[Account]] = repo.values.filter(_.dateOfOpen == openedOn).toSeq.right
+  def all: \/[NonEmptyList[String], Seq[Account]] = repo.values.toSeq.right
 }
 
 object AccountRepositoryInMemory extends AccountRepositoryInMemory
