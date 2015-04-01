@@ -20,7 +20,6 @@ case class Balance(amount: Amount = 0)
 sealed trait Account {
   def no: String
   def name: String
-  def rate: Option[BigDecimal] = None
   def dateOfOpen: Option[Date]
   def dateOfClose: Option[Date]
   def balance: Balance
@@ -104,6 +103,11 @@ object Account {
         case s: SavingsAccount  => s.copy(balance = Balance(s.balance.amount + amount))
       }
     }.disjunction
+  }
+
+  def rate(a: Account) = a match {
+    case SavingsAccount(_, _, r, _, _, _) => r.some
+    case _ => None
   }
 }
 

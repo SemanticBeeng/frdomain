@@ -6,27 +6,30 @@ import scalaz._
 import Scalaz._
 import Kleisli._
 
-import service.interpreter.{ AccountService, InterestCalculation, ReportingService }
+import service.interpreter.{ AccountService, InterestPostingService, ReportingService }
 import repository.interpreter.AccountRepositoryInMemory
 import service.{ Checking, Savings }
+import model.common._
+import model.Account
 
 object App {
 
   import AccountService._
-  import InterestCalculation._
+  import InterestPostingService._
   import ReportingService._
 
-  val postTransactions = 
-    for {
-      a <- open("a-123", "debasish ghosh", None, None, Checking)
-      _ <- credit(a.no, 10000)
-      _ <- credit(a.no, 15000)
-      b <- debit(a.no, 13000)
-    } yield b
+  def postTransactions(a: Account, cr: Amount, db: Amount) = 
+    for { 
+      _ <- credit(a.no, cr)
+      d <- debit(a.no, db)
+    } yield d
 
-  val composite = postTransactions >=> computeInterest
+  def composite(no: String, name: String, cr: Amount, db: Amount) = (for {
+    a <- open(no, name, BigDecimal(0.4).some, None, Savings)
+    t <- postTransactions(a, cr, db)
+  } yield t) >=> computeInterest >=> computeTax
 
-  val x = composite(AccountRepositoryInMemory)
+  val x = composite("a-123", "debasish ghosh", 10000, 2000)(AccountRepositoryInMemory)
 
   val opens = 
     for {

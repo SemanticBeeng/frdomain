@@ -10,7 +10,6 @@ import repository.AccountRepository
 
 
 trait ReportingService[Amount] {
-  type Valid[A] = NonEmptyList[String] \/ A
   type ReportOperation[A] = Kleisli[Valid, AccountRepository, A]
 
   def balanceByAccount: ReportOperation[Seq[(String, Amount)]]
