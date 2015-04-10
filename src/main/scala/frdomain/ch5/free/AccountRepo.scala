@@ -12,7 +12,6 @@ sealed trait AccountRepoF[+A]
 case class Query[+A](no: String, onResult: Account => A) extends AccountRepoF[A]
 case class Store[+A](account: Account, next: A) extends AccountRepoF[A]
 case class Delete[+A](no: String, next: A) extends AccountRepoF[A]
-case class Fail[+A](e: Throwable) extends AccountRepoF[A]
 
 object AccountRepoF {
   implicit val functor: Functor[AccountRepoF] = new Functor[AccountRepoF] {
@@ -20,7 +19,6 @@ object AccountRepoF {
       case Store(account, next) => Store(account, f(next))
       case Query(no, onResult) => Query(no, onResult andThen f)
       case Delete(no, next) => Delete(no, f(next))
-      case Fail(th) => Fail(th): AccountRepoF[B]
     }
   }
 }
@@ -35,8 +33,6 @@ trait AccountRepository {
   def delete(no: String): AccountRepo[Unit] = 
     liftF(Delete(no, ()))
 
-  def error[A](e: Throwable) = liftF(Fail(e):AccountRepoF[A])
-
   def update(no: String, f: Account => Account): AccountRepo[Unit] = for {
     a <- query(no)
     _ <- store(f(a))
@@ -47,4 +43,5 @@ trait AccountRepository {
     _ <- store(f(a, amount))
   } yield ()
 }
+object AccountRepository extends AccountRepository
 
