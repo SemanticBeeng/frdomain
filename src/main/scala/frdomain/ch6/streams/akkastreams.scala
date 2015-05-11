@@ -14,7 +14,7 @@ import scala.concurrent.Future
 
 import common._
 import OnlineService._
-import TransactionUnit._
+import Transaction._
 
 object Main {
   implicit val as = ActorSystem()
@@ -22,26 +22,62 @@ object Main {
   val settings = ActorFlowMaterializerSettings(as)
   implicit val mat = ActorFlowMaterializer(settings)
 
+  /**
+   * Create a stream of transactions
+   */
   val transactions: Source[Transaction, Unit] =
     Source(allTransactions).mapConcat(identity)
 
-  val amountSink: Sink[TransactionUnit, Future[TransactionUnit]] = 
-    Sink.fold[TransactionUnit, TransactionUnit](TransactionUnitMonoid.zero)(_ |+| _)
+  val accountNos: Source[String, Unit] =
+    Source(allAccounts).mapConcat(identity)
 
-  val writeTransactions: Sink[Transaction, Future[Unit]] = Sink.foreach(println)
+  /**
+   * Would like to fold transactions through monoid append
+   */
+  val txnSink: Sink[Transaction, Future[Transaction]] = 
+    Sink.fold[Transaction, Transaction](TransactionMonoid.zero)(_ |+| _)
 
-  val totalAmount: RunnableFlow[Future[TransactionUnit]] = 
-    transactions.map(_.unit).toMat(amountSink)(Keep.right)
-    // transactions.groupBy(_.accountNo).map { case (a, s) => s.map(_.unit).toMat(amountSink)(Keep.right) }
-    // 
+  val netTxnSink: Sink[Transaction, Future[Map[String, Transaction]]] = { 
+    Sink.fold[Map[String, Transaction], Transaction](Map.empty[String, Transaction]) { (acc, t) => acc |+| Map(t.accountNo -> t) }
+  }
 
-  val g = FlowGraph.closed() { implicit b =>
+  /**
+   * Dumy function for writing transactions
+   */
+  val audit: Sink[Transaction, Future[Unit]] = Sink.foreach(println)
+  val writeNetAll: Sink[Map[String, Transaction], Future[Unit]] = Sink.foreach(println)
+
+  /**
+   * Create multiple streams out of a single stream. The stream "transactions" is being
+   * demultiplexed into many streams split by account number. Each of the sub-streams are
+   * then materialized to the fold sink "txnSink", which folds each of the transaction
+   * substreams to compute the net value of the transaction for that account
+   */
+  val netTxn: Source[RunnableFlow[Future[Transaction]], Unit] = 
+    transactions.map(validate).groupBy(_.accountNo).map { case (a, s) => s.toMat(txnSink)(Keep.right) }
+
+  /**
+   * Run all the materialized streams and print
+   */
+  // netTxn.map(_.run()).runForeach(_.foreach(println))
+
+  val graph = FlowGraph.closed(netTxnSink) { implicit b => ms =>
     import FlowGraph.Implicits._
  
-    val bcast = b.add(Broadcast[Transaction](2))
-    transactions ~> bcast.in
-    bcast.out(0) ~> Flow[Transaction].map(identity) ~> writeTransactions 
-    // change this to update Balance in Account
-    bcast.out(1) ~> Flow[Transaction].map(_.unit).toMat(amountSink)(Keep.right)
+    val accountBroadcast = b.add(Broadcast[Account](2))
+    val txnBroadcast = b.add(Broadcast[Transaction](2))
+    val merge = b.add(Merge[Transaction](2))
+
+    val accounts = Flow[String].map(queryAccount(_, AccountRepository))
+    val bankingTxns = Flow[Account].mapConcat(getBankingTransactions)
+    val settlementTxns = Flow[Account].mapConcat(getSettlementTransactions)
+    val validation = Flow[Transaction].map(validate)
+
+    accountNos ~> accounts ~> accountBroadcast ~> bankingTxns ~> merge ~> validation ~> txnBroadcast ~> ms
+                              accountBroadcast ~> settlementTxns ~> merge
+    txnBroadcast ~> audit
   }
+
+  // val r = graph.run()
+  // r foreach println
 }
