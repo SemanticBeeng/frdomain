@@ -19,4 +19,15 @@ trait OrderModel {this: RefModel =>
       Order(co("no"), Calendar.getInstance.getTime, co("customer"), lineItems.toList)
     }
   }
+
+  private def instrumentsInClientOrder: ClientOrder => Int = { co =>
+    co("instrument").split("-").size
+  }
+
+  trait OrderLaw {
+    def sizeLaw: Seq[ClientOrder] => Seq[Order] => Boolean = { cos => orders => cos.size == orders.size }
+    def lineItemLaw: Seq[ClientOrder] => Seq[Order] => Boolean = { cos => orders =>
+      cos.map(instrumentsInClientOrder).sum == orders.map(_.items.size).sum
+    }
+  }
 }

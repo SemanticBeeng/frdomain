@@ -27,8 +27,8 @@ object FRDomainProject extends Build
       "com.typesafe.akka"            %% "akka-persistence-experimental" % akkaVersion,
       "com.typesafe.akka"            %  "akka-stream-experimental_2.11" % "1.0-RC4",
       "com.typesafe.scala-logging"   %% "scala-logging-slf4j"           % "2.1.2",
-      "ch.qos.logback"               % "logback-classic"                % "1.1.3",
-      "org.scalacheck"               %%  "scalacheck"                   % "1.11.5"       % "test"
+      "ch.qos.logback"               %  "logback-classic"               % "1.1.3",
+      "org.scalacheck"               %%  "scalacheck"                   % "1.12.4"       % "test"
     ),
     parallelExecution in Test := false,
     publishTo <<= version { (v: String) => 
