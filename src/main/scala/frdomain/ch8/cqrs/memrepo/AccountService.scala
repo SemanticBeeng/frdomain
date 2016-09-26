@@ -25,7 +25,7 @@ case class Credited(no: String, amount: Amount, at: DateTime = today) extends Ev
 
 object Event {
 
-  val eventLog = TrieMap[String, List[Event[_]]]() 
+  val eventLog = TrieMap[String, List[Event[_]]]()
   val eventLogJson = TrieMap[String, List[String]]()
 
   def updateState(e: Event[_], initial: Map[String, Account]) = e match {
@@ -50,58 +50,63 @@ object Event {
     else currentList.right
   }
 
-  def snapshot(es: List[Event[_]]): String \/ Map[String, Account] = 
+  def snapshot(es: List[Event[_]]): String \/ Map[String, Account] =
     es.reverse.foldLeft(Map.empty[String, Account]) { (a, e) => updateState(e, a) }.right
 
-  def snapshotFromJson(es: List[String]): String \/ Map[String, Account] = 
+  def snapshotFromJson(es: List[String]): String \/ Map[String, Account] =
     es.reverse.foldLeft(Map.empty[String, Account]) { (a, e) => updateState(e.parseJson.convertTo[Event[_]], a) }.right
 }
 
 object Commands extends Commands {
   import Event._
 
-  def closed(a: Account): Error \/ Account =
-    if (a.dateOfClosing isDefined) s"Account ${a.no} is closed".left
-    else a.right
+  trait Rules {
 
-  def beforeOpeningDate(a: Account, cd: Option[DateTime]): Error \/ Account =
-    if (a.dateOfOpening isBefore cd.getOrElse(today)) 
-      s"Cannot close at a date earlier than opening date ${a.dateOfOpening}".left
-    else a.right
+    def closed(a: Account): Error \/ Account =
+      if (a.dateOfClosing isDefined) s"Account ${a.no} is closed".left
+      else a.right
 
-  def sufficientFundsToDebit(a: Account, amount: Amount): Error \/ Account =
-    if (a.balance.amount < amount) s"insufficient fund to debit $amount from ${a.no}".left
-    else a.right
+    def beforeOpeningDate(a: Account, cd: Option[DateTime]): Error \/ Account =
+      if (a.dateOfOpening isBefore cd.getOrElse(today))
+        s"Cannot close at a date earlier than opening date ${a.dateOfOpening}".left
+      else a.right
 
-  def validateClose(no: String, cd: Option[DateTime]) = for {
-    l <- events(no)
-    s <- snapshot(l)
-    a <- closed(s(no))
-    _ <- beforeOpeningDate(a, cd)
-  } yield s
+    def sufficientFundsToDebit(a: Account, amount: Amount): Error \/ Account =
+      if (a.balance.amount < amount) s"insufficient fund to debit $amount from ${a.no}".left
+      else a.right
+  }
 
-  def validateDebit(no: String, amount: Amount) = for {
-    l <- events(no)
-    s <- snapshot(l)
-    a <- closed(s(no))
-    _ <- sufficientFundsToDebit(a, amount)
-  } yield s
+  object Validator extends Rules {
 
-  def validateCredit(no: String) = for {
-    l <- events(no)
-    s <- snapshot(l)
-    _ <- closed(s(no))
-  } yield s
+    def validateClose(no: String, cd: Option[DateTime]) = for {
+      l <- events(no)
+      s <- snapshot(l)
+      a <- closed(s(no))
+      _ <- beforeOpeningDate(a, cd)
+    } yield s
 
-  def validateOpen(no: String) =
-    eventLog.get(no)
-            .map { _ => s"Account with no = $no already exists".left }
-            .getOrElse(no.right)
-    
-    
+    def validateDebit(no: String, amount: Amount) = for {
+      l <- events(no)
+      s <- snapshot(l)
+      a <- closed(s(no))
+      _ <- sufficientFundsToDebit(a, amount)
+    } yield s
+
+    def validateCredit(no: String) = for {
+      l <- events(no)
+      s <- snapshot(l)
+      _ <- closed(s(no))
+    } yield s
+
+    def validateOpen(no: String) =
+      eventLog.get(no)
+              .map { _ => s"Account with no = $no already exists".left }
+              .getOrElse(no.right)
+  }
+
   def handleCommand[A](e: Event[A]): Task[A] = e match {
 
-    case o @ Opened(no, name, odate, _) => validateOpen(no).fold(
+    case o @ Opened(no, name, odate, _) => Validator.validateOpen(no).fold(
       err => fail(new RuntimeException(err)),
       _   => now {
         val a = Account(no, name, odate.get)
@@ -111,7 +116,7 @@ object Commands extends Commands {
       }
     )
 
-    case c @ Closed(no, cdate, _) => validateClose(no, cdate).fold(
+    case c @ Closed(no, cdate, _) => Validator.validateClose(no, cdate).fold(
       err => fail(new RuntimeException(err)),
       currentState => now {
         eventLog += (no -> (c :: eventLog.getOrElse(no, Nil)))
@@ -120,7 +125,7 @@ object Commands extends Commands {
       }
     )
 
-    case d @ Debited(no, amount, _) => validateDebit(no, amount).fold(
+    case d @ Debited(no, amount, _) => Validator.validateDebit(no, amount).fold(
       err => fail(new RuntimeException(err)),
       currentState => now {
         eventLog += (no -> (d :: eventLog.getOrElse(no, Nil)))
@@ -129,7 +134,7 @@ object Commands extends Commands {
       }
     )
 
-    case r @ Credited(no, amount, _) => validateCredit(no).fold(
+    case r @ Credited(no, amount, _) => Validator.validateCredit(no).fold(
       err => fail(new RuntimeException(err)),
       currentState => now {
         eventLog += (no -> (r :: eventLog.getOrElse(no, Nil)))
